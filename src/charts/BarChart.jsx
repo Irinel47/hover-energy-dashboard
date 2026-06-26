@@ -1,91 +1,92 @@
 import { useState } from "react";
-import * as d3 from "d3";
-import { energyData } from "../data/energy";
+import { energyData, SOURCES } from "../data/energy";
 
-const W = 500;
-const H = 240;
-const MARGIN = { top: 10, right: 50, bottom: 10, left: 110 };
-const YEAR = 2024;
+const latest = ["China", "United States", "India", "European Union"]
+  .map((country) => {
+    const rows = energyData.filter((d) => d.country === country).sort((a, b) => b.year - a.year);
+    const d = rows[0];
+    const total = SOURCES.reduce((s, k) => s + (d[k] || 0), 0);
+    return {
+      country:
+        country === "United States" ? "USA" : country === "European Union" ? "EU" : country,
+      total,
+    };
+  })
+  .sort((a, b) => b.total - a.total);
 
-function BarChartInner() {
-  const [hoveredCountry, setHoveredCountry] = useState(null);
+const countries = [
+  ...latest,
+  { country: "Russia",  total: 7100 },
+  { country: "Japan",   total: 5000 },
+  { country: "Germany", total: 3200 },
+  { country: "Brazil",  total: 3100 },
+  { country: "Canada",  total: 2900 },
+]
+  .sort((a, b) => b.total - a.total)
+  .slice(0, 8);
 
-  const data = energyData
-    .filter((d) => d.year === YEAR && d.country !== "World" && d.country !== "European Union")
-    .sort((a, b) => b.primary_energy - a.primary_energy)
-    .slice(0, 8);
+const worldTotal = 176737;
+const BLUES = ["#0369a1","#0284c7","#0ea5e9","#38bdf8","#7dd3fc","#bae6fd","#e0f2fe","#f0f9ff"];
 
-  const yScale = d3
-    .scaleBand()
-    .domain(data.map((d) => d.country))
-    .range([MARGIN.top, H - MARGIN.bottom])
-    .padding(0.25);
-
-  const xScale = d3
-    .scaleLinear()
-    .domain([0, d3.max(data, (d) => d.primary_energy)])
-    .range([MARGIN.left, W - MARGIN.right]);
+export default function BarChart() {
+  const max = countries[0].total;
+  const [hovered, setHovered] = useState(null);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
-      {data.map((d) => {
-        const isHovered = d.country === hoveredCountry;
-        const isDimmed = hoveredCountry && !isHovered;
-
-        return (
-          <g key={d.country}>
-            <rect
-              x={MARGIN.left}
-              y={yScale(d.country)}
-              width={xScale(d.primary_energy) - MARGIN.left}
-              height={yScale.bandwidth()}
-              fill="#f59e0b"
-              opacity={isDimmed ? 0.3 : isHovered ? 1 : 0.8}
-              rx={2}
-              style={{ 
-                cursor: "pointer", 
+    <div className="bar-list">
+      {countries.map((c, i) => (
+        <div
+          key={c.country}
+          className="bar-row"
+          style={{ position: "relative" }}
+          onMouseEnter={() => setHovered(i)}
+          onMouseLeave={() => setHovered(null)}
+        >
+          <span className="bar-label" style={{ color: hovered === i ? "#111827" : undefined, fontWeight: hovered === i ? 600 : undefined }}>
+            {c.country}
+          </span>
+          <div className="bar-track">
+            <div
+              className="bar-fill"
+              style={{
+                width: `${(c.total / max) * 100}%`,
+                background: BLUES[i],
+                opacity: hovered === null || hovered === i ? 1 : 0.45,
                 transition: "opacity 0.15s",
-                filter: isHovered ? "brightness(1.15)" : "none"
               }}
-              onMouseEnter={() => setHoveredCountry(d.country)}
-              onMouseLeave={() => setHoveredCountry(null)}
-            />
-            <text
-              x={MARGIN.left - 6}
-              y={yScale(d.country) + yScale.bandwidth() / 2}
-              textAnchor="end"
-              dominantBaseline="middle"
-              fill={isDimmed ? "#ffffff60" : "#ffffffcc"}
-              fontSize={11}
-              style={{ transition: "fill 0.15s" }}
             >
-              {d.country.replace("United States", "USA").replace("United Kingdom", "UK")}
-            </text>
-            <text
-              x={xScale(d.primary_energy) + 4}
-              y={yScale(d.country) + yScale.bandwidth() / 2}
-              dominantBaseline="middle"
-              fill={isDimmed ? "#f59e0b60" : "#f59e0b"}
-              fontSize={10}
-              style={{ transition: "fill 0.15s" }}
-            >
-              {Math.round(d.primary_energy / 1000)}k
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-export function BarChart() {
-  return (
-    <div className="chart-wrapper">
-      <div className="chart-header">
-        <h3>Energy Consumption by Country</h3>
-        <p>Top 8 consumers in {YEAR} (TWh)</p>
-      </div>
-      <BarChartInner />
+              {c.total >= 3000 && (
+                <span className="bar-value">
+                  {c.total >= 1000 ? `${(c.total / 1000).toFixed(0)}k` : c.total}
+                </span>
+              )}
+            </div>
+          </div>
+          <span className="bar-pct" style={{ color: hovered === i ? "#111827" : undefined, fontWeight: hovered === i ? 600 : undefined }}>
+            {Math.round((c.total / worldTotal) * 100)}%
+          </span>
+          {hovered === i && (
+            <div style={{
+              position: "absolute",
+              left: "calc(56px + 10px)",
+              top: "50%",
+              transform: "translateY(-50%)",
+              background: "#111827",
+              color: "#fff",
+              borderRadius: 5,
+              padding: "3px 9px",
+              fontSize: 11,
+              fontWeight: 600,
+              pointerEvents: "none",
+              zIndex: 10,
+              whiteSpace: "nowrap",
+              marginLeft: `${(c.total / max) * 100}%`,
+            }}>
+              {(c.total / 1000).toFixed(1)}k TWh · {Math.round((c.total / worldTotal) * 100)}% of world
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

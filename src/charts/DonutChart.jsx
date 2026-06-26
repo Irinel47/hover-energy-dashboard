@@ -1,141 +1,119 @@
+import { useRef, useEffect, useCallback } from "react";
 import * as d3 from "d3";
-import { energyData, SOURCES, SOURCE_COLORS, SOURCE_LABELS } from "../data/energy";
+import { energyData, SOURCES, SOURCE_LABELS, SOURCE_COLORS } from "../data/energy";
 
-const YEAR = 2024;
-const W = 500;
-const H = 260;
+const world2024 = energyData.find((d) => d.country === "World" && d.year === 2024);
+const total = SOURCES.reduce((s, k) => s + (world2024[k] || 0), 0);
 
-function DonutInner({ hoveredSource, onHoverSource }) {
-  const worldRow = energyData.find((d) => d.country === "World" && d.year === YEAR);
+const slices = SOURCES.map((k) => ({
+  label: SOURCE_LABELS[k],
+  color: SOURCE_COLORS[k],
+  value: world2024[k] || 0,
+  pct: Math.round(((world2024[k] || 0) / total) * 100),
+}))
+  .filter((s) => s.value > 0)
+  .sort((a, b) => b.value - a.value);
 
-  const pieData = SOURCES.map((key) => ({ key, value: worldRow[key] })).filter((d) => d.value > 0);
+export default function DonutChart() {
+  const svgRef = useRef(null);
+  const wrapRef = useRef(null);
 
-  const radius = Math.min(W * 0.4, H / 2) - 10;
-  const cx = W * 0.35;
-  const cy = H / 2;
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
 
-  const pie = d3.pie().value((d) => d.value).sort(null);
-  const arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius);
-  const hoverArc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius * 1.05);
-  const labelArc = d3.arc().innerRadius(radius * 0.75).outerRadius(radius * 0.75);
+    const draw = () => {
+      const sz = Math.min(el.clientWidth, el.clientHeight);
+      if (sz < 40) return;
 
-  const slices = pie(pieData);
-  const total = d3.sum(pieData, (d) => d.value);
+      d3.select(svgRef.current).selectAll("*").remove();
 
-  const legendX = W * 0.65;
-  const legendStartY = 20;
-  const legendLineH = 22;
+      const r = sz / 2 - 6;
+      const inner = r * 0.56;
+
+      const svg = d3
+        .select(svgRef.current)
+        .attr("width", sz).attr("height", sz)
+        .append("g")
+        .attr("transform", `translate(${sz / 2},${sz / 2})`);
+
+      const pie = d3.pie().value((d) => d.value).sort(null);
+      const arc     = d3.arc().innerRadius(inner).outerRadius(r).padAngle(0.02).cornerRadius(3);
+      const arcHover = d3.arc().innerRadius(inner).outerRadius(r + 7).padAngle(0.02).cornerRadius(3);
+
+      // Center labels (mutated on hover)
+      const centerTop = svg
+        .append("text")
+        .attr("text-anchor", "middle").attr("dy", "-0.2em")
+        .attr("font-size", sz * 0.13).attr("font-weight", "700")
+        .attr("fill", "#111827").text("2024");
+
+      const centerBot = svg
+        .append("text")
+        .attr("text-anchor", "middle").attr("dy", "1.1em")
+        .attr("font-size", sz * 0.075).attr("fill", "#9ca3af")
+        .text("World Mix");
+
+      svg
+        .selectAll("path")
+        .data(pie(slices))
+        .enter()
+        .append("path")
+        .attr("d", arc)
+        .attr("fill", (d) => d.data.color)
+        .attr("opacity", 0.88)
+        .style("cursor", "pointer")
+        .on("mouseenter", function (_, d) {
+          d3.select(this)
+            .transition().duration(150)
+            .attr("d", arcHover)
+            .attr("opacity", 1);
+
+          // Dim all others
+          svg.selectAll("path")
+            .filter((p) => p !== d)
+            .transition().duration(150)
+            .attr("opacity", 0.3);
+
+          centerTop
+            .transition().duration(100)
+            .text(`${d.data.pct}%`)
+            .attr("fill", d.data.color);
+          centerBot
+            .transition().duration(100)
+            .text(d.data.label);
+        })
+        .on("mouseleave", function () {
+          svg.selectAll("path")
+            .transition().duration(150)
+            .attr("d", arc)
+            .attr("opacity", 0.88);
+
+          centerTop.transition().duration(100).text("2024").attr("fill", "#111827");
+          centerBot.transition().duration(100).text("World Mix");
+        });
+    };
+
+    draw();
+    const ro = new ResizeObserver(draw);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
-      <g transform={`translate(${cx}, ${cy})`}>
-        {slices.map((s) => {
-          const isHovered = s.data.key === hoveredSource;
-          const isDimmed = hoveredSource && !isHovered;
-
-          return (
-            <path
-              key={s.data.key}
-              d={isHovered ? hoverArc(s) : arc(s)}
-              fill={SOURCE_COLORS[s.data.key]}
-              opacity={isDimmed ? 0.3 : 0.9}
-              stroke="#0f172a"
-              strokeWidth={1}
-              style={{
-                cursor: "pointer",
-                transition: "opacity 0.15s",
-                filter: isHovered ? "brightness(1.15)" : "none"
-              }}
-              onMouseEnter={() => onHoverSource(s.data.key)}
-              onMouseLeave={() => onHoverSource(null)}
-            />
-          );
-        })}
-        {slices
-          .filter((s) => s.data.value / total > 0.06)
-          .map((s) => {
-            const [lx, ly] = labelArc.centroid(s);
-            const isDimmed = hoveredSource && s.data.key !== hoveredSource;
-            
-            return (
-              <text
-                key={s.data.key}
-                x={lx}
-                y={ly}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fill="white"
-                fontSize={9}
-                fontWeight="bold"
-                opacity={isDimmed ? 0.3 : 1}
-                style={{ transition: "opacity 0.15s", pointerEvents: "none" }}
-              >
-                {Math.round((s.data.value / total) * 100)}%
-              </text>
-            );
-          })}
-        <text textAnchor="middle" fill="white" fontSize={13} dy={-7}>
-          {YEAR}
-        </text>
-        <text textAnchor="middle" fill="#ffffff80" fontSize={9} dy={9}>
-          World Mix
-        </text>
-      </g>
-
-      {pieData.map((d, i) => {
-        const isDimmed = hoveredSource && d.key !== hoveredSource;
-
-        return (
-          <g
-            key={d.key}
-            transform={`translate(${legendX}, ${legendStartY + i * legendLineH})`}
-            style={{ cursor: "pointer" }}
-            onMouseEnter={() => onHoverSource(d.key)}
-            onMouseLeave={() => onHoverSource(null)}
-          >
-            <rect
-              width={10}
-              height={10}
-              y={-1}
-              fill={SOURCE_COLORS[d.key]}
-              rx={2}
-              opacity={isDimmed ? 0.3 : 1}
-              style={{ transition: "opacity 0.15s" }}
-            />
-            <text
-              x={14}
-              y={8}
-              fill={isDimmed ? "#ffffff60" : "#ffffffcc"}
-              fontSize={10}
-              style={{ transition: "fill 0.15s" }}
-            >
-              {SOURCE_LABELS[d.key]}
-            </text>
-            <text
-              x={115}
-              y={8}
-              fill={isDimmed ? "#ffffff30" : "#ffffff60"}
-              fontSize={9}
-              textAnchor="end"
-              style={{ transition: "fill 0.15s" }}
-            >
-              {Math.round((d.value / total) * 100)}%
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-export function DonutChart({ hoveredSource, onHoverSource }) {
-  return (
-    <div className="chart-wrapper">
-      <div className="chart-header">
-        <h3>Energy Mix Breakdown</h3>
-        <p>World {YEAR} share by source</p>
+    <div className="donut-body">
+      <div ref={wrapRef} style={{ width: "44%", aspectRatio: "1", flexShrink: 0 }}>
+        <svg ref={svgRef} style={{ display: "block" }} />
       </div>
-      <DonutInner hoveredSource={hoveredSource} onHoverSource={onHoverSource} />
+      <div className="donut-legend">
+        {slices.map((s) => (
+          <div key={s.label} className="donut-legend-row">
+            <div className="donut-legend-dot" style={{ background: s.color }} />
+            <span className="donut-legend-name">{s.label}</span>
+            <span className="donut-legend-pct">{s.pct}%</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
