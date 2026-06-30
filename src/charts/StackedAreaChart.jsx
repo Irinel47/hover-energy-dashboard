@@ -1,6 +1,11 @@
 import { useRef, useEffect, useState } from "react";
 import * as d3 from "d3";
-import { energyData, SOURCES, SOURCE_LABELS, SOURCE_COLORS } from "../data/energy";
+import {
+  energyData,
+  SOURCES,
+  SOURCE_LABELS,
+  SOURCE_COLORS,
+} from "../data/energy";
 
 const worldData = energyData
   .filter((d) => d.country === "World")
@@ -9,7 +14,6 @@ const worldData = energyData
 export default function StackedAreaChart() {
   const svgRef = useRef(null);
   const wrapRef = useRef(null);
-  const [tooltip, setTooltip] = useState(null);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -41,7 +45,10 @@ export default function StackedAreaChart() {
         .range([0, w]);
 
       const yMax = d3.max(stack[stack.length - 1], (d) => d[1]);
-      const y = d3.scaleLinear().domain([0, yMax * 1.02]).range([h, 0]);
+      const y = d3
+        .scaleLinear()
+        .domain([0, yMax * 1.02])
+        .range([h, 0]);
 
       // Grid
       svg
@@ -49,7 +56,9 @@ export default function StackedAreaChart() {
         .call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat(""))
         .call((g) => {
           g.select(".domain").remove();
-          g.selectAll("line").attr("stroke", "#e4e7ec").attr("stroke-dasharray", "3,3");
+          g.selectAll("line")
+            .attr("stroke", "#e4e7ec")
+            .attr("stroke-dasharray", "3,3");
         });
 
       // Areas
@@ -84,7 +93,12 @@ export default function StackedAreaChart() {
       // Y axis
       svg
         .append("g")
-        .call(d3.axisLeft(y).ticks(5).tickFormat((d) => (d >= 1000 ? `${d / 1000}k` : d)))
+        .call(
+          d3
+            .axisLeft(y)
+            .ticks(5)
+            .tickFormat((d) => (d >= 1000 ? `${d / 1000}k` : d)),
+        )
         .call((g) => {
           g.select(".domain").remove();
           g.selectAll("line").remove();
@@ -94,39 +108,34 @@ export default function StackedAreaChart() {
       // Hover crosshair
       const vline = svg
         .append("line")
-        .attr("y1", 0).attr("y2", h)
-        .attr("stroke", "#6b7280").attr("stroke-width", 1)
-        .attr("stroke-dasharray", "4,3").attr("opacity", 0)
+        .attr("y1", 0)
+        .attr("y2", h)
+        .attr("stroke", "#6b7280")
+        .attr("stroke-width", 1)
+        .attr("stroke-dasharray", "4,3")
+        .attr("opacity", 0)
         .attr("pointer-events", "none");
 
       const bisect = d3.bisector((d) => d.year).left;
 
       svg
         .append("rect")
-        .attr("width", w).attr("height", h)
+        .attr("width", w)
+        .attr("height", h)
         .attr("fill", "transparent")
         .style("cursor", "crosshair")
         .on("mousemove", function (event) {
           const [mx] = d3.pointer(event);
           const year = Math.round(x.invert(mx));
-          const idx = Math.min(bisect(worldData, year, 1), worldData.length - 1);
+          const idx = Math.min(
+            bisect(worldData, year, 1),
+            worldData.length - 1,
+          );
           const d = worldData[idx];
           vline.attr("x1", x(d.year)).attr("x2", x(d.year)).attr("opacity", 1);
-          const rect = el.getBoundingClientRect();
-          setTooltip({
-            cx: event.clientX - rect.left,
-            cy: event.clientY - rect.top,
-            year: d.year,
-            total: d.primary_energy,
-            rows: SOURCES
-              .map((k) => ({ label: SOURCE_LABELS[k], color: SOURCE_COLORS[k], v: d[k] || 0 }))
-              .filter((r) => r.v > 0)
-              .sort((a, b) => b.v - a.v),
-          });
         })
         .on("mouseleave", () => {
           vline.attr("opacity", 0);
-          setTooltip(null);
         });
     };
 
@@ -137,46 +146,31 @@ export default function StackedAreaChart() {
   }, []);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, position: "relative" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        flex: 1,
+        minHeight: 0,
+        position: "relative",
+      }}
+    >
       <div className="legend">
         {SOURCES.map((k) => (
           <div key={k} className="legend-item">
-            <div className="legend-dot" style={{ background: SOURCE_COLORS[k] }} />
+            <div
+              className="legend-dot"
+              style={{ background: SOURCE_COLORS[k] }}
+            />
             {SOURCE_LABELS[k]}
           </div>
         ))}
       </div>
-      <div ref={wrapRef} style={{ flex: 1, minHeight: 0, position: "relative" }}>
+      <div
+        ref={wrapRef}
+        style={{ flex: 1, minHeight: 0, position: "relative" }}
+      >
         <svg ref={svgRef} style={{ display: "block" }} />
-        {tooltip && (
-          <div style={{
-            position: "absolute",
-            left: tooltip.cx > (wrapRef.current?.clientWidth ?? 0) / 2 ? tooltip.cx - 180 : tooltip.cx + 14,
-            top: Math.max(tooltip.cy - 10, 4),
-            background: "#fff",
-            border: "1px solid #e4e7ec",
-            borderRadius: 8,
-            padding: "10px 14px",
-            fontSize: 11,
-            pointerEvents: "none",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
-            zIndex: 10,
-            minWidth: 160,
-          }}>
-            <div style={{ fontWeight: 700, marginBottom: 7, color: "#111827", fontSize: 12 }}>
-              {tooltip.year} · {(tooltip.total / 1000).toFixed(0)}k TWh
-            </div>
-            {tooltip.rows.map((r) => (
-              <div key={r.label} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                <div style={{ width: 8, height: 8, borderRadius: 2, background: r.color, flexShrink: 0 }} />
-                <span style={{ color: "#6b7280", flex: 1 }}>{r.label}</span>
-                <span style={{ fontWeight: 600, color: "#111827" }}>
-                  {r.v >= 1000 ? `${(r.v / 1000).toFixed(1)}k` : r.v}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
